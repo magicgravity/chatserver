@@ -1,0 +1,253 @@
+syntax = "proto3";
+option go_package = "proto";
+
+option java_multiple_files = true;
+option java_package = "github.magicgravity.chatserver.proto";
+option java_outer_classname = "ChatProto";
+
+package proto;
+
+
+message CommonHeaderRequest{
+     string VersionNo = 1;
+     int64  ReqSeqNo = 2;
+     string ReqTime = 3;
+     string IpAddr = 4;
+     int32 DeviceType = 5;
+     string DeviceOsInfo = 6;
+     string TransCode = 7;
+     string SessionId = 8;
+}
+
+message CommonHeaderResponse{
+     string VersionNo = 1;
+     int64 ReqSeqNo = 2;
+     int64 ResSeqNo = 3;
+     string ResTime = 4;
+     string MsgCode = 5;
+     string MsgInfo = 6;
+     string TransCode = 7;
+     string SessionId = 8;
+}
+
+
+message UserInfo{
+     string UserId = 1;
+     string UserName  = 2;
+     SexType Sex = 3;
+     string AvatarUrl = 4;
+     string BgImgUrl = 5;
+     string Introduce = 6;
+     string Email = 7;
+}
+
+enum SexType{
+    Male = 0;
+    Female = 1;
+}
+
+//查询用户信息
+
+message QueryUserInfoRequest{
+    CommonHeaderRequest CommonHeader=1;
+    string MobileNo = 2;
+    string UserId = 3;
+}
+
+message QueryUserInfoResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    UserInfo User = 2;
+}
+
+//校验用户登录信息 通过uid/pwd
+
+message VerifyUserLoginByUidPwdRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string UserId = 2;
+    string Pwd = 3;
+}
+
+
+message VerifyUserLoginByUidPwdResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    int32 VerifyResultFlag = 2;
+    UserInfo User = 3;
+}
+
+//校验用户登录信息 通过mobile/sms
+
+message VerifyUserLoginByMobileSmsRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string MobileNo = 2;
+    string SmsCode = 3;
+}
+
+
+message VerifyUserLoginByMobileSmsResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    int32 VerifyResultFlag = 2;
+    UserInfo User = 3;
+}
+
+
+//检测是否已注册   mobile/uid 2选一即可
+message CheckUserExistRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string MobileNo = 2;
+    string UserId = 3;
+}
+
+message CheckUserExistResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    bool ExistFlag = 2;
+}
+
+
+//注册新用户
+message UserRegisterRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string UserId = 2;
+    string MobileNo = 3;
+    string Pwd = 4;
+    string SmsCode = 5;
+    string Email = 6;
+}
+
+message UserRegisterResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    bool RegisterFlag = 2;
+}
+
+
+//请求短信验证码   带上随机序号  防止短信轰炸;带上使用类型 用于短信内容拼接
+enum SmsCodeType{
+    RegisterNewUser = 0;
+    ForgetAndFindPwd = 1;
+    LoginByMobileSms = 2;
+}
+
+message GetSmsCodeRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string MobileNo = 2;
+    string RandomSeqNo = 3;
+    SmsCodeType SmsType = 4;
+}
+
+message GetSmsCodeResponse{
+    CommonHeaderResponse CommonHeader = 1;
+}
+
+//搜索其他人 通过关键字
+enum SearchPersonKeyType {
+    ByUserId = 0;
+    ByUserName = 1;
+    ByUserIntroduce = 2;
+    ByUserLocation = 3;
+    ByUserSex = 4;
+    ByUserMobileNo = 5;
+}
+
+message SearchOtherPersonsRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    SearchPersonKeyType KeyType = 2;
+    string SearchKey = 3;
+}
+
+message SearchOtherPersonsResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    int32 UserCount = 2;
+    repeated UserInfo Users = 3;
+}
+
+
+//添加好友
+message SendMakeFriendRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string FromUserId = 2;
+    string ToUserId = 3;
+    string HelloMsg = 4;
+}
+
+message SendMakeFriendResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    int32 SendFlag = 2;
+}
+
+
+//向好友发送消息
+enum MessageType{
+    PureTextMsg = 0;
+    TextImageMixMsg = 1;
+    ImageMsg = 2;
+    AudioMsg = 3;
+    VideoMsg = 4;
+    FileMsg = 5;
+}
+
+message MessageDetail{
+    int32 MsgLen = 1;
+    string MsgVerifyNum = 2;
+    bytes MsgContent = 3;
+}
+
+message SendMsgRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    MessageType MsgType = 2;
+    string SendUserId = 3;
+    string RecvUserId = 4;
+    repeated MessageDetail MsgData = 5;
+}
+
+//msgstatus  int   xx-xx位 是否已打开  xx-xx位 是否已送达
+
+message SendMsgResponse{
+    CommonHeaderResponse CommonHeader = 1;
+    int32 MsgStatus = 2;
+}
+
+
+//退出登录
+
+message LogoutRequest{
+    CommonHeaderRequest CommonHeader = 1;
+    string UserId = 2;
+}
+
+message LogoutResponse{
+    CommonHeaderResponse CommonHeader = 1;
+}
+
+//登录
+service Login {
+    //登录校验 通过用户名密码
+    rpc VerifyLogin(VerifyUserLoginByUidPwdRequest) returns (VerifyUserLoginByUidPwdResponse) {}
+    //登录校验 通过手机短信
+    rpc VerifyLoginBySms(VerifyUserLoginByMobileSmsRequest) returns (VerifyUserLoginByMobileSmsResponse) {}
+}
+
+//注册
+service Regist {
+    //注册
+    rpc Register (UserRegisterRequest) returns (UserRegisterResponse) {}
+    //检测是否已存在
+    rpc IsExist (CheckUserExistRequest) returns (CheckUserExistResponse) {}
+}
+
+//聊天
+service Chat {
+    //搜索朋友
+    rpc SearchFriend(SearchOtherPersonsRequest) returns (SearchOtherPersonsResponse){}
+    //添加好友
+    rpc AddFriend(SendMakeFriendRequest) returns (SendMakeFriendResponse) {}
+    //发送消息
+    rpc SendMsg(stream SendMsgRequest) returns (stream SendMsgResponse) {}
+}
+
+//查询
+service Query {
+    //查询用户信息
+    rpc QueryUser (QueryUserInfoRequest) returns (QueryUserInfoResponse) {}
+
+    //获取短信验证码
+    rpc GetSmsCode(GetSmsCodeRequest) returns (GetSmsCodeResponse){}
+}

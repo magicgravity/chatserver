@@ -1,0 +1,1 @@
+protoc --go_out=plugins=grpc,import_path=github.com.magicgravity.chatserver.proto:. *.proto
