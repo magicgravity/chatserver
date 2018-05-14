@@ -4,6 +4,7 @@ import (
 	"time"
 	"crypto/md5"
 	"encoding/hex"
+	"math/rand"
 )
 
 func FormatCurrentDateYYYYMMdd()string{
@@ -32,4 +33,16 @@ func GenMd5Result(raw ,salt string) (string,error){
 func GenGoroutineId()int{
 	//todo
 	return 0
+}
+
+
+func GenRandomInt(min ,max int)int {
+	rand.Seed(time.Now().Unix())
+	if max>min {
+		return 	min + rand.Intn(max - min)
+	}else  if max == min {
+		return  max
+	}else {
+		return max + rand.Intn(min-max)
+	}
 }

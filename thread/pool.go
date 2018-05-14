@@ -5,6 +5,7 @@ import (
 	"sync"
 	"math"
 	"errors"
+	"github.com/magicgravity/chatserver/common"
 )
 
 type RefusePolicy int
@@ -14,6 +15,10 @@ const (
 	DiscardPolicy RefusePolicy =1		/* 丢弃任务，但是不抛出异常 */
 	DiscardOldestPolicy  RefusePolicy=2	/* 丢弃队列最前面的任务，然后重新尝试执行任务（重复此过程）*/
 	CallerRunsPolicy RefusePolicy=3		/* 调用线程处理该任务*/
+
+	PoolState_Inital = 0
+	PoolState_Running = 1
+	PoolState_Destroy = 2
 )
 
 var RejectedExecutionError  = errors.New("task is rejected to execute")
@@ -35,7 +40,7 @@ type Executor interface {
 
 type ExecutorService interface {
 	shutDown()
-	submit(*WorkTask)
+	submit(int,interface{},[]interface{})chan *TaskResult
 	start()
 }
 
@@ -47,6 +52,7 @@ type threadPoolExecutor struct {
 	waitQueue []*WorkTask
 	maxWaitQueueSize int
 	refusePolicy RefusePolicy
+	exitChan chan bool
 }
 
 
@@ -64,53 +70,53 @@ func (pe *threadPoolExecutor)execute(job *WorkTask){
 		}else{
 			//队列满了
 			switch pe.refusePolicy {
-			case AbortPolicy:
-				rst := TaskResult{}
-				rst.err = RejectedExecutionError
-				rst.data = nil
-				job.FutureResult<-&rst
-				close(job.FutureResult)
-			case DiscardPolicy:
-				rst := TaskResult{}
-				rst.err = nil
-				rst.data = nil
-				job.FutureResult<-&rst
-				close(job.FutureResult)
-				return
-			case DiscardOldestPolicy:
-				oldest := pe.waitQueue[0]
-				pe.mainLock.Lock()
-				pe.waitQueue = pe.waitQueue[1:]
-				pe.mainLock.Unlock()
-				rst := TaskResult{}
-				rst.err = RejectedOldestTaskExecutionError
-				rst.data = nil
-				oldest.FutureResult<-&rst
-				close(oldest.FutureResult)
-				isGoHere = true
-			case CallerRunsPolicy:
-			default:
-				//默认直接丢弃  不报错
-				rst := TaskResult{}
-				rst.err = nil
-				rst.data = nil
-				job.FutureResult<-&rst
-				close(job.FutureResult)
-				return
+				case AbortPolicy:
+					rst := TaskResult{}
+					rst.err = RejectedExecutionError
+					rst.data = nil
+					job.FutureResult<-&rst
+					close(job.FutureResult)
+				case DiscardPolicy:
+					rst := TaskResult{}
+					rst.err = nil
+					rst.data = nil
+					job.FutureResult<-&rst
+					close(job.FutureResult)
+					return
+				case DiscardOldestPolicy:
+					oldest := pe.waitQueue[0]
+					pe.mainLock.Lock()
+					pe.waitQueue = pe.waitQueue[1:]
+					pe.mainLock.Unlock()
+					rst := TaskResult{}
+					rst.err = RejectedOldestTaskExecutionError
+					rst.data = nil
+					oldest.FutureResult<-&rst
+					close(oldest.FutureResult)
+					isGoHere = true
+				case CallerRunsPolicy:
+				default:
+					//默认直接丢弃  不报错
+					rst := TaskResult{}
+					rst.err = nil
+					rst.data = nil
+					job.FutureResult<-&rst
+					close(job.FutureResult)
+					return
 			}
 		}
 	}
 
 
 here:
-	if pe.workState == 0 {
+	if pe.workState == PoolState_Inital {
 		//初始状态  先存到队列里
 		addToWaitQueue()
 		if isGoHere{
 			goto here
 		}
 		return
-	}else if pe.workState ==1{
+	}else if pe.workState ==PoolState_Running{
 		//运行状态
 		if len(pe.waitQueue)>0 {
 			//仍然往等待队列里提交
@@ -127,28 +133,118 @@ here:
 	}
 }
 
-func (pe *threadPoolExecutor)submit(job *WorkTask){
+/*
+	提交一个任务
+	p：优先级
+	function :任务描述
+	params:	  任务参数
 
+ */
+func (pe *threadPoolExecutor)submit(p int,function interface{},params []interface{})chan *TaskResult{
+	//TODO 需要判断类型 把提交的内容 包装成WorkTask
+	switch function.(type) {
+		case func(interface{})interface{},error:
+		case func([]interface{})[]interface{},error:
+		case func([]interface{}):
+		case func(interface{}):
+		default:
+
+	}
+	return nil
+}
+
+func (pe *threadPoolExecutor)shutDown(){
+	pe.mainLock.Lock()
+	defer pe.mainLock.Unlock()
+	pe.workState = PoolState_Destroy
+	pe.exitChan <- true
+	endCmd := Op{GoRoutine_OpCmd_End}
+	//通知池内的goroutine
+	for _,g :=range pe.pool.pool{
+		g.opChan <-endCmd
+	}
 }
 
 /*
 	启动
  */
 func (pe *threadPoolExecutor)start(){
-	if pe.workState == 0 {
+	if pe.workState == PoolState_Inital {
 		//只有初始状态 才进入
 		pe.mainLock.Lock()
 		defer pe.mainLock.Unlock()
-		size := len(pe.pool.pool)
-		var idx =0
-		for {
-			if idx <size{
 
-
-			}else{
-				break
+		go func(){
+forExit:
+			for {
+				if len(pe.waitQueue) > 0 {
+					top := pe.waitQueue[0]
+					select {
+						case pe.pool.workQueue <- top:
+							//添加成功 则删除这个任务
+							pe.mainLock.Lock()
+							pe.waitQueue = pe.waitQueue[1:]
+							pe.mainLock.Unlock()
+						default:
+							//TODO
+					}
+				}else if pe.workState == PoolState_Destroy{
+					//销毁情况 则需要退出
+					break forExit
+				}else{
+					time.Sleep(time.Second*5)
+				}
 			}
-		}
+		}()
+
+		go func(){
+forExit2:
+			for {
+				//分配任务
+				select {
+					case job:= <- pe.pool.workQueue:
+						var retryTime = 0
+						ranMaxRetryTime := common.GenRandomInt(1,len(pe.pool.pool))
+						for _,q := range pe.pool.pool{
+							if q.state == GoRoutine_IntialStatus{
+								//如果是初始状态  启动它
+								q.Run()
+								q.Dispatch(job)
+								//已分配的则 跳出for 处理
+								break
+							}else if q.state == GoRoutine_IdleStatus {
+								//
+								q.Dispatch(job)
+								//已分配的则 跳出for 处理
+								break
+							}else if q.state == GoRoutine_EndStatus {
+								continue
+							}else if q.state == GoRoutine_WaitRunStatus  || q.state == GoRoutine_RunningStatus{
+								//如果是 等待运行或者 运行状态
+								if retryTime >= ranMaxRetryTime{
+									//超出次数 就往这个发
+									q.Dispatch(job)
+									break
+								}else{
+									//没有找到 就继续找
+									continue
+								}
+							}
+						}
+
+						//TODO 有可能没找到合适的 分配任务
+
+					case exitFlag:= <-pe.exitChan :
+						if exitFlag {
+							break forExit2
+						}
+					default:
+						//默认情况下  检测临时区是否有累积的
+
+				}
+			}
+		}()
+
 	}
 }
 
