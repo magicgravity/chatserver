@@ -5,6 +5,8 @@ import (
 	"time"
 	"strconv"
 	"sort"
+	"bytes"
+	"fmt"
 )
 
 const (
@@ -17,6 +19,12 @@ const (
 	GoRoutine_OpCmd_End = "End"
 	GoRoutine_OpCmd_Pause = "Pause"
 	GoRoutine_OpCmd_Resume = "Resume"
+
+	GoRoutine_GType_Main = 0
+	GoRoutine_GType_Other = 1
+
+	GoRoutine_DefaultQueueSize = 100
+	GoRoutine_DefaultAliveTime = time.Hour*24*7*30*12
 )
 
 type GoRoutineContext struct {
@@ -37,6 +45,17 @@ type WorkTask struct {
 	Params []interface{}
 	FutureResult chan *TaskResult
 	Priority int
+}
+
+func (w *WorkTask)ToString()string{
+	buf := bytes.Buffer{}
+	buf.WriteString("TaskFunc=>")
+	buf.WriteString(fmt.Sprintf("[%v]",w.Tasks))
+	buf.WriteString("\r\nTaskParams=>")
+	buf.WriteString(fmt.Sprintf("[%v]",w.Params))
+	buf.WriteString("\r\nTaskPriority:")
+	buf.WriteString(fmt.Sprintf("[%d]",w.Priority))
+	return buf.String()
 }
 
 type TaskSet []*WorkTask
@@ -248,6 +267,7 @@ ForEnd:
 					}else if g.state == GoRoutine_EndStatus && len(g.tempTaskZone) ==0 {
 						//所有任务都已经完成  可以退出
 						close(runTimeChan)
+						close(g.noticeChan)
 						break ForEnd
 
 					}
@@ -267,6 +287,7 @@ ForEnd:
 					}else if g.state == GoRoutine_EndStatus && len(g.tempTaskZone) ==0 {
 						//所有任务都已经完成  可以退出
 						close(runTimeChan)
+						close(g.noticeChan)
 						break ForEnd
 
 					}
@@ -315,6 +336,11 @@ func execTask(g *GoRoutine,task *WorkTask,runTimeChan chan time.Duration){
 		task.FutureResult <- MakeTaskResult(rs, err)
 		close(task.FutureResult)
 		runTimeChan <- usedTime
+		gn := GNotice{}
+		gn.LastRunResult = rs
+		gn.RunErr = err
+		gn.CurrentRunTask = task.ToString()
+		g.noticeChan<-gn
 	}()
 	g.historyJobs = append(g.historyJobs,task)
 	//执行完成后更改状态 终止状态的情况 不能被更改

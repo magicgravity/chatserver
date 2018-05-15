@@ -6,6 +6,7 @@ import (
 	"math"
 	"errors"
 	"github.com/magicgravity/chatserver/common"
+	"golang.org/x/tools/go/gcimporter15/testdata"
 )
 
 type RefusePolicy int
@@ -143,8 +144,8 @@ here:
 func (pe *threadPoolExecutor)submit(p int,function interface{},params []interface{})chan *TaskResult{
 	//TODO 需要判断类型 把提交的内容 包装成WorkTask
 	switch function.(type) {
-		case func(interface{})interface{},error:
-		case func([]interface{})[]interface{},error:
+		case func(interface{})(interface{},error):
+		case func([]interface{})([]interface{},error):
 		case func([]interface{}):
 		case func(interface{}):
 		default:
@@ -174,6 +175,7 @@ func (pe *threadPoolExecutor)start(){
 		pe.mainLock.Lock()
 		defer pe.mainLock.Unlock()
 
+
 		go func(){
 forExit:
 			for {
@@ -200,6 +202,23 @@ forExit:
 		go func(){
 forExit2:
 			for {
+				if len(pe.pool.pool)<pe.pool.corePoolSize{
+					//线程数量小与核心池数量  则补充成员
+
+					for i:=0;i< pe.pool.corePoolSize;i++ {
+						if g,ok := pe.pool.pool[i];ok {
+							// 只有非终止状态的 不会启动新线程
+							if g.state != GoRoutine_EndStatus {
+								continue
+							}
+						}
+
+						createGroutineAndAddPool(pe.pool,GoRoutine_GType_Other,i)
+
+					}
+				}
+
+
 				//分配任务
 				select {
 					case job:= <- pe.pool.workQueue:
@@ -218,6 +237,20 @@ forExit2:
 								//已分配的则 跳出for 处理
 								break
 							}else if q.state == GoRoutine_EndStatus {
+								//如果是终止状态 检查数量 是否需要补足
+								if len(pe.pool.pool)<pe.pool.corePoolSize{
+									for i:=0;i< pe.pool.corePoolSize;i++ {
+										if g,ok := pe.pool.pool[i];ok {
+											// 只有非终止状态的 不会启动新线程
+											if g.state != GoRoutine_EndStatus {
+												continue
+											}
+										}
+
+										createGroutineAndAddPool(pe.pool,GoRoutine_GType_Other,i)
+
+									}
+								}
 								continue
 							}else if q.state == GoRoutine_WaitRunStatus  || q.state == GoRoutine_RunningStatus{
 								//如果是 等待运行或者 运行状态
@@ -300,9 +333,30 @@ func (p *executorsFactory)newFixedThreadPool(nThread int)(*threadPoolExecutor,er
 	grpool.keepAliveTime = time.Minute
 	grpool.pool = make(map[int]*GoRoutine,nThread)
 
+	for i:=0;i<nThread;i++{
+		if i==0 {
+			createGroutineAndAddPool(&grpool,GoRoutine_GType_Main,i)
+		}else{
+			createGroutineAndAddPool(&grpool,GoRoutine_GType_Other,i)
+		}
+
+	}
 	tpool.pool = &grpool
 
 	return &tpool,nil
+}
+
+
+func createGroutineAndAddPool(p *goRoutinePool,gtype,pos int)(chan Op,chan GNotice){
+	if len(p.pool)<=pos{
+		return nil,nil
+	}else{
+		opChannel := make(chan Op)
+		noticeChannel := make(chan GNotice)
+		p.pool[pos] = makeNewGoRoutine(pos,gtype,GoRoutine_DefaultQueueSize,
+			GoRoutine_DefaultAliveTime,opChannel,noticeChannel)
+		return opChannel,noticeChannel
+	}
 }
 
 /*
