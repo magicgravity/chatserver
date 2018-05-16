@@ -6,7 +6,7 @@ import (
 	"math"
 	"errors"
 	"github.com/magicgravity/chatserver/common"
-	"golang.org/x/tools/go/gcimporter15/testdata"
+	"fmt"
 )
 
 type RefusePolicy int
@@ -24,6 +24,8 @@ const (
 
 var RejectedExecutionError  = errors.New("task is rejected to execute")
 var RejectedOldestTaskExecutionError = errors.New("task is too old ,so it was rejected to execute")
+var WarpFunctionToTaskError = errors.New("warp function to worktask fail")
+var WorkTaskParamInValidCommonError = errors.New("worktask param is invalid ")
 
 
 
@@ -54,6 +56,7 @@ type threadPoolExecutor struct {
 	maxWaitQueueSize int
 	refusePolicy RefusePolicy
 	exitChan chan bool
+	noticeChCh chan chan GNotice
 }
 
 
@@ -141,17 +144,65 @@ here:
 	params:	  任务参数
 
  */
-func (pe *threadPoolExecutor)submit(p int,function interface{},params []interface{})chan *TaskResult{
+func (pe *threadPoolExecutor)submit(p int,function interface{},params []interface{})(chan *TaskResult,error){
 	//TODO 需要判断类型 把提交的内容 包装成WorkTask
+	//func([]interface{})([]interface{},error)
+	task := WorkTask{}
+	task.Priority = p
+	task.Params = params
+	futureChan := make(chan *TaskResult)
+	task.FutureResult = futureChan
+	var warpError error = nil
 	switch function.(type) {
 		case func(interface{})(interface{},error):
+			if len(params)!=1{
+				warpError = WorkTaskParamInValidCommonError
+			}
+			task.Tasks = func(p []interface{})([]interface{},error){
+				func1 := function.(func(interface{})(interface{},error))
+				rs,err := func1(p[0])
+				rss := make([]interface{},1)
+				rss[0] = rs
+				return rss,err
+			}
 		case func([]interface{})([]interface{},error):
+			task.Tasks = function.(func([]interface{})([]interface{},error))
 		case func([]interface{}):
+			task.Tasks = func(p []interface{}) ([]interface{}, error) {
+				func1 := function.(func([]interface{}))
+				func1(p)
+				return nil,nil
+			}
 		case func(interface{}):
+			if len(params)!=1{
+				warpError = WorkTaskParamInValidCommonError
+			}
+			task.Tasks = func(p []interface{}) ([]interface{}, error) {
+				func1 := function.(func(interface{}))
+				func1(p)
+				return nil,nil
+			}
+		case func(interface{})(error):
+			if len(params)!=1{
+				warpError = WorkTaskParamInValidCommonError
+			}
+			task.Tasks = func(p []interface{}) ([]interface{}, error) {
+				func1 := function.(func(interface{})(error))
+				return nil,func1(p)
+			}
+		case func([]interface{})(interface{},error):
+			task.Tasks = func(p []interface{}) ([]interface{}, error) {
+				func1 := function.(func([]interface{})(interface{},error))
+				v,r := func1(p)
+				rss := make([]interface{},1)
+				rss[0] = v
+				return rss,r
+			}
 		default:
+			warpError = WarpFunctionToTaskError
 
 	}
-	return nil
+	return futureChan,warpError
 }
 
 func (pe *threadPoolExecutor)shutDown(){
@@ -175,6 +226,22 @@ func (pe *threadPoolExecutor)start(){
 		pe.mainLock.Lock()
 		defer pe.mainLock.Unlock()
 
+		go func(){
+			nclist := make([]chan GNotice,100)
+			for{
+				select {
+					case nc:= <-pe.noticeChCh:
+						nclist = append(nclist,nc)
+					default:
+						for _,n := range nclist{
+							select {
+								case notice:=<-n:
+									fmt.Printf("goroutine notice ==> %v \r\n",notice)
+							}
+						}
+				}
+			}
+		}()
 
 		go func(){
 forExit:
@@ -205,17 +272,7 @@ forExit2:
 				if len(pe.pool.pool)<pe.pool.corePoolSize{
 					//线程数量小与核心池数量  则补充成员
 
-					for i:=0;i< pe.pool.corePoolSize;i++ {
-						if g,ok := pe.pool.pool[i];ok {
-							// 只有非终止状态的 不会启动新线程
-							if g.state != GoRoutine_EndStatus {
-								continue
-							}
-						}
-
-						createGroutineAndAddPool(pe.pool,GoRoutine_GType_Other,i)
-
-					}
+					checkPoolSizeForCreate(pe)
 				}
 
 
@@ -239,17 +296,7 @@ forExit2:
 							}else if q.state == GoRoutine_EndStatus {
 								//如果是终止状态 检查数量 是否需要补足
 								if len(pe.pool.pool)<pe.pool.corePoolSize{
-									for i:=0;i< pe.pool.corePoolSize;i++ {
-										if g,ok := pe.pool.pool[i];ok {
-											// 只有非终止状态的 不会启动新线程
-											if g.state != GoRoutine_EndStatus {
-												continue
-											}
-										}
-
-										createGroutineAndAddPool(pe.pool,GoRoutine_GType_Other,i)
-
-									}
+									checkPoolSizeForCreate(pe)
 								}
 								continue
 							}else if q.state == GoRoutine_WaitRunStatus  || q.state == GoRoutine_RunningStatus{
@@ -281,6 +328,19 @@ forExit2:
 	}
 }
 
+func checkPoolSizeForCreate(pe *threadPoolExecutor){
+	for i:=0;i< pe.pool.corePoolSize;i++ {
+		if g,ok := pe.pool.pool[i];ok {
+			// 只有非终止状态的 不会启动新线程
+			if g.state != GoRoutine_EndStatus {
+				continue
+			}
+		}
+		_,n :=createGroutineAndAddPool(pe.pool,GoRoutine_GType_Other,i)
+		pe.noticeChCh<-n
+	}
+}
+
 type executorsFactory struct {
 
 }
@@ -306,6 +366,8 @@ func (p *executorsFactory)newCachedThreadPool()(*threadPoolExecutor,error){
 	tpool.maxWaitQueueSize = 1000
 	tpool.waitQueue = make([]*WorkTask,0)
 	tpool.refusePolicy = DiscardOldestPolicy
+	tpool.noticeChCh = make(chan chan GNotice)
+	tpool.exitChan = make(chan bool)
 	grpool := goRoutinePool{}
 	grpool.corePoolSize = 0
 	grpool.maxPoolSize = math.MaxInt32
@@ -327,6 +389,8 @@ func (p *executorsFactory)newFixedThreadPool(nThread int)(*threadPoolExecutor,er
 	tpool.maxWaitQueueSize = nThread
 	tpool.waitQueue = make([]*WorkTask,0)
 	tpool.refusePolicy = AbortPolicy
+	tpool.noticeChCh = make(chan chan GNotice)
+	tpool.exitChan = make(chan bool)
 	grpool := goRoutinePool{}
 	grpool.corePoolSize = nThread
 	grpool.maxPoolSize = math.MaxInt32

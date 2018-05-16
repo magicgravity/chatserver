@@ -32,3 +32,4 @@ func TestGenRandomInt(t *testing.T) {
 	fmt.Printf("v4 == > %d \r\n",v4)
 	fmt.Printf("v5 == > %d \r\n",v5)
 }
+
