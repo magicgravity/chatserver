@@ -202,8 +202,12 @@ func (pe *threadPoolExecutor)submit(p int,function interface{},params []interfac
 			warpError = WarpFunctionToTaskError
 
 	}
-	pe.execute(&task)
-	return futureChan,warpError
+	if warpError== nil {
+		pe.execute(&task)
+		return futureChan,warpError
+	}else{
+		return nil,warpError
+	}
 }
 
 func (pe *threadPoolExecutor)shutDown(){
