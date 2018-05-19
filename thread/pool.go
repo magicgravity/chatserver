@@ -198,6 +198,14 @@ func (pe *threadPoolExecutor)submit(p int,function interface{},params []interfac
 				rss[0] = v
 				return rss,r
 			}
+		case func([]interface{})interface{}:
+			task.Tasks = func(p []interface{}) ([]interface{}, error) {
+				func1 := function.(func([]interface{})interface{})
+				v := func1(p)
+				rss := make([]interface{},1)
+				rss[0] = v
+				return rss,nil
+			}
 		default:
 			warpError = WarpFunctionToTaskError
 
