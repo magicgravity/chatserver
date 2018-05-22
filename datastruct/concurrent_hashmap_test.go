@@ -38,7 +38,7 @@ func TestConcurrentHashMap_Put(t *testing.T) {
 	var concurrentNum =2
 	wg.Add(concurrentNum)
 	testFunc := func() {
-		dd := genData(200)
+		dd := genData(60)
 		for k, v := range dd {
 			cmap.Put(k, v)
 		}

@@ -33,3 +33,169 @@ func TestGenRandomInt(t *testing.T) {
 	fmt.Printf("v5 == > %d \r\n",v5)
 }
 
+func TestSimpleStringMatch(t *testing.T) {
+	var(
+		testData = make(map[string]string)
+		testExpectRes = make(map[string]bool)
+	)
+	testData["abcd1234453"]="cd"
+	testExpectRes["abcd1234453"]=true
+
+	testData["A2Bs2d"]="2Bs"
+	testExpectRes["A2Bs2d"] = true
+
+
+	testData["A2Bs2d3"]="2Bs232"
+	testExpectRes["A2Bs2d3"] = false
+
+
+	for k,v := range testData{
+		fmt.Printf("srcStr======>%s ; patternStr====>%s  ",k,v)
+		ret := SimpleStringMatch(v,k)
+		fmt.Printf("======>%d  ",ret)
+		exp,_ := testExpectRes[k]
+		if ret>0 && exp {
+			fmt.Println("ok")
+		} else if ret <0 && !exp{
+			fmt.Println("ok")
+		}else{
+			fmt.Println("fail")
+		}
+	}
+
+}
+
+
+func TestKMP(t *testing.T) {
+	var(
+		testData = make(map[string]string)
+		testExpectRes = make(map[string]bool)
+	)
+	testData["abcd1234453"]="cd"
+	testExpectRes["abcd1234453"]=true
+
+	testData["A2Bs2d"]="2Bs"
+	testExpectRes["A2Bs2d"] = true
+
+
+	testData["A2Bs2d3"]="2Bs232"
+	testExpectRes["A2Bs2d3"] = false
+
+
+	for k,v := range testData{
+		fmt.Printf("srcStr======>%s ; patternStr====>%s  ",k,v)
+		ret := KMP(v,k)
+		fmt.Printf("======>%d  ",ret)
+		exp,_ := testExpectRes[k]
+		if ret>0 && exp {
+			fmt.Println("ok")
+		} else if ret <0 && !exp{
+			fmt.Println("ok")
+		}else{
+			fmt.Println("fail")
+		}
+	}
+
+}
+
+type IntArr []int
+
+func (ia IntArr)Len() int{
+	return len(ia)
+}
+
+func (ia IntArr)Less(i, j int) bool{
+	return ia[i]<ia[j]
+}
+
+func (ia IntArr)Swap(i, j int){
+	ia[i],ia[j] = ia[j],ia[i]
+}
+
+
+func TestBasicBubbleSort(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23,65,34,-8,9}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	BasicBubbleSort(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+func TestAdvanceBubbleSortVer_01(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	AdvanceBubbleSortVer_01(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+
+func TestAdvanceBubbleSortVer_02(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	AdvanceBubbleSortVer_02(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+func TestAdvanceBubbleSortVer_03(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	AdvanceBubbleSortVer_03(testArr,false)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+
+func TestChooseSort(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	ChooseSort(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+func TestInsertSort(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	InsertSort(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+
+func TestShellSort(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	ShellSort(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
