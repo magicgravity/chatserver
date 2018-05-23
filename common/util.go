@@ -382,3 +382,124 @@ func ShellSort(arr sort.Interface,ascOrder bool)sort.Interface{
 	}
 	return arr
 }
+
+type DataInterface interface {
+	sort.Interface
+	Slice(start,end int)DataInterface
+	Equal(i,j int)bool
+}
+
+
+func reverseArrayFunc(a DataInterface,n int) DataInterface{
+	var (
+		i =0
+		j = n-1
+	)
+	for i<j {
+		a.Swap(i,j)
+		i++
+		j--
+	}
+	return a
+}
+
+
+func exchangeFunc(a DataInterface,len ,lenleft int)DataInterface{
+	reverseArrayFunc(a,lenleft)
+	reverseArrayFunc(a.Slice(lenleft,a.Len()),len -lenleft)
+	reverseArrayFunc(a,len)
+	return a
+}
+
+func mergeFunc(a DataInterface,begin,mid,end int)DataInterface{
+	for begin <mid && mid<=end {
+		step := 0
+		for begin<mid && (a.Less(begin,mid)||a.Equal(begin,mid)){
+			begin++
+		}
+		for mid<=end && (a.Less(mid,begin) || a.Equal(mid,begin)) {
+			mid++
+			step++
+		}
+		exchangeFunc(a.Slice(begin,a.Len()),mid-begin,mid-begin-step)
+	}
+	return a
+}
+
+func mergeCore(a DataInterface,left ,right int) DataInterface{
+	if left<right {
+		mid := (left +right) /2
+		mergeCore(a,left,mid)
+		mergeCore(a,mid+1,right)
+		mergeFunc(a,left,mid+1,right)
+	}
+	return a
+}
+/*
+	 归并排序
+	 空间复杂度 为O(1)
+ */
+func MergeSort(arr DataInterface,ascOrder bool)DataInterface{
+
+	if arr.Len()<1 {
+		return arr
+	}else{
+		mergeCore(arr,0,arr.Len()-1)
+	}
+	if !ascOrder{
+		var (
+			start = 0
+			end = arr.Len()-1
+		)
+		for start<=end{
+			arr.Swap(start,end)
+			start++
+			end--
+		}
+	}
+	return arr
+}
+
+
+
+func qs_Partition(arr sort.Interface,low,high int ,ascOrder bool)int{
+	var (
+		left = low
+		right = high
+		pivot = low
+	)
+	for left < right{
+		for (ascOrder && arr.Less(left,pivot)) || (!ascOrder && arr.Less(pivot,left)) {
+			left ++
+		}
+
+		for (ascOrder && arr.Less(pivot,right)) || (!ascOrder && arr.Less(right,pivot)) {
+			right--
+		}
+		if left<right {
+			arr.Swap(left,right)
+		}
+	}
+	arr.Swap(low,right)
+	arr.Swap(right,pivot)
+	return right
+}
+
+func qs_innerQuickSort(a sort.Interface,low,high int,order bool)sort.Interface{
+	var pivot = 0
+	if high > low {
+		pivot = qs_Partition(a,low,high,order)
+		qs_innerQuickSort(a,low,pivot-1,order)
+		qs_innerQuickSort(a,pivot+1,high,order)
+	}
+	return a
+}
+
+/*
+	快速排序 递归形式
+ */
+func QuickSort(arr sort.Interface,ascOrder bool)sort.Interface{
+	arrLen := arr.Len()
+	qs_innerQuickSort(arr,0,arrLen-1,ascOrder)
+	return arr
+}

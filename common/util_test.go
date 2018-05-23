@@ -112,6 +112,14 @@ func (ia IntArr)Swap(i, j int){
 	ia[i],ia[j] = ia[j],ia[i]
 }
 
+func (ia IntArr)Slice(s,e int)DataInterface{
+	return ia[s:e]
+}
+
+func (ia IntArr)Equal(i,j int)bool{
+	return ia[i]==ia[j]
+}
+
 
 func TestBasicBubbleSort(t *testing.T) {
 	testData := []int{10,33,1,20031,232,999,11,8,23,65,34,-8,9}
@@ -198,4 +206,30 @@ func TestShellSort(t *testing.T) {
 	for i,k := range testArr{
 		fmt.Printf("[%d]----->[%d] \r\n",i,k)
 	}
+}
+
+
+func TestMergeSort(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23,1023,1027,4,88}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	MergeSort(testArr,true)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+}
+
+func TestQuickSort(t *testing.T) {
+	testData := []int{10,33,1,20031,232,999,11,8,23,1023,1027,4,88}
+	testArr := make(IntArr,0)
+	testArr = append(testArr,testData...)
+
+	QuickSort(testArr,false)
+
+	for i,k := range testArr{
+		fmt.Printf("[%d]----->[%d] \r\n",i,k)
+	}
+
 }
