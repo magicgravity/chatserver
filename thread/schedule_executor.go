@@ -68,3 +68,8 @@ type ScheduledExecutorService interface {
 
 	scheduleWithFixedDelay(initalDelay,delay time.Duration,block *CallableBlock)ScheduleFuture
 }
+
+type DefaultScheduleExecutorService struct {
+
+}
+
