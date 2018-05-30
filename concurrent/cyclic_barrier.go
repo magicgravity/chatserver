@@ -12,7 +12,6 @@ type CyclicBarrier struct {
 	cond *sync.Cond
 	barrierFuc *func()bool
 	isBroken int32
-	joinCh chan bool
 }
 
 
@@ -24,7 +23,6 @@ func NewCyclicBarrier(parties int,barrierAction *func()bool)*CyclicBarrier{
 	cb.cond = sync.NewCond(&lock)
 	cb.barrierFuc =  barrierAction
 	atomic.StoreInt32(&cb.isBroken,0)
-	cb.joinCh = make(chan bool)
 	return &cb
 }
 
@@ -35,6 +33,7 @@ func (cb *CyclicBarrier)Await(){
 		return
 	}
 
+	atomic.AddInt64(&cb.refCount,1)
 	if isSwap := atomic.CompareAndSwapInt64(&cb.refCount,cb.num,cb.num);isSwap{
 		fmt.Println("reach the limit")
 		cb.cond.L.Lock()
@@ -55,9 +54,8 @@ func (cb *CyclicBarrier)Await(){
 		atomic.StoreInt64(&cb.refCount, 0)
 
 		cb.cond.Broadcast()
-		cb.joinCh<-true
+
 	}else{
-		atomic.AddInt64(&cb.refCount,1)
 		cb.cond.L.Lock()
 		defer cb.cond.L.Unlock()
 		cb.cond.Wait()
@@ -78,10 +76,3 @@ func (cb *CyclicBarrier)Reset(){
 }
 
 
-func (cb *CyclicBarrier)Join(){
-	select {
-		case <-cb.joinCh:
-			fmt.Println(111)
-			close(cb.joinCh)
-	}
-}

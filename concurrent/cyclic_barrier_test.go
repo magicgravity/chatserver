@@ -4,25 +4,35 @@ import (
 	"testing"
 	"time"
 	"fmt"
+	"sync"
 )
 
 func TestNewCyclicBarrier(t *testing.T) {
 	cbFunc := func()bool{
+		fmt.Println("cbFunc exec ing ...")
 		return true
 	}
-	cycBar := NewCyclicBarrier(2,&cbFunc)
+	i:=5
+	cycBar := NewCyclicBarrier(i,&cbFunc)
 
 
-	func1 := func(){
-		time.Sleep(time.Second)
-		fmt.Println(">>>>>>>>>>>prepare ok !")
-		cycBar.Await()
+	wg := sync.WaitGroup{}
+	wg.Add(i)
+	func1 := func(w *sync.WaitGroup){
+		k := 7
+		for k >0 {
+			time.Sleep(time.Millisecond*10)
+			fmt.Printf(">>>>>>>>>>>prepare ok ! %d \r\n",k)
+			cycBar.Await()
+			k--
+		}
+		wg.Done()
 	}
-	i:=2
+
 	for i>0 {
-		go func1()
+		go func1(&wg)
 		i--
 	}
-	cycBar.Join()
+	wg.Wait()
 	fmt.Println("<<<<<<<<<<<<<<<<<<<<")
 }
