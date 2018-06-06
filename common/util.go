@@ -45,6 +45,9 @@ func GenGoroutineId()int{
 
 
 func GenRandomInt(min ,max int)int {
+	if min<0 || max <0 {
+		panic("input range can not be negative")
+	}
 	rand.Seed(time.Now().Unix())
 	if max>min {
 		return 	min + rand.Intn(max - min)
@@ -52,6 +55,35 @@ func GenRandomInt(min ,max int)int {
 		return  max
 	}else {
 		return max + rand.Intn(min-max)
+	}
+}
+
+func GenRandomIntWithNegative(min,max int)int{
+	if (min<=0 && max <=0) || (min >=0 && max >=0 ) {
+		minAbs := min
+		maxAbs := max
+		if min < 0{
+			minAbs = -minAbs
+		}
+		if max < 0{
+			maxAbs = -maxAbs
+		}
+		ranVal := GenRandomInt(minAbs,maxAbs)
+		if min<0 {
+			return -ranVal
+		}else{
+			return ranVal
+		}
+	}else if (min <0 && max > 0) || (min >0 && max <0){
+		minR := min
+		maxR := max
+		if min > 0 {
+			minR,maxR = maxR,minR
+		}
+		ranVal := GenRandomInt(0,maxR -minR)
+		return ranVal+minR
+	}else {
+		panic("input range is not right")
 	}
 }
 
@@ -502,4 +534,47 @@ func QuickSort(arr sort.Interface,ascOrder bool)sort.Interface{
 	arrLen := arr.Len()
 	qs_innerQuickSort(arr,0,arrLen-1,ascOrder)
 	return arr
+}
+
+
+/*
+ *	Compare two sds strings s1 and s2 with memcmp().
+ *
+ * Return value:
+ *
+ *     positive if s1 > s2.
+ *     negative if s1 < s2.
+ *     0 if s1 and s2 are exactly the same binary string.
+ */
+func StringBaseCompare(s1,s2 string)int {
+	l1 ,l2 := len(s1),len(s2)
+	minLen := 0
+	if len(s1)<len(s2) {
+		minLen = l1
+	}else{
+		minLen = l2
+	}
+	cmp := 0
+	for i:=0;i<minLen;i++ {
+		if s1[i]>s2[i] {
+			cmp  = 1
+			break
+		}else if s1[i]<s2[i]{
+			cmp = -1
+			break
+		}else{
+			continue
+		}
+	}
+	if cmp == 0{
+		if len(s1)>len(s2){
+			return 1
+		}else if len(s1)<len(s2){
+			return -1
+		}else{
+			return 0
+		}
+	}else{
+		return cmp
+	}
 }

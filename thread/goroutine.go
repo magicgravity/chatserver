@@ -1,5 +1,6 @@
 package thread
 
+
 import (
 	"sync"
 	"time"
@@ -7,6 +8,7 @@ import (
 	"sort"
 	"bytes"
 	"fmt"
+	//"log"
 )
 
 const (
@@ -34,6 +36,21 @@ type GoRoutineContext struct {
 type TaskResult struct {
 	data []interface{}
 	err error
+}
+
+func (tr *TaskResult)String() string{
+	buf := bytes.Buffer{}
+	if tr.err != nil {
+		buf.WriteString(fmt.Sprintf("[err]=[%v],\r\n",tr.err))
+	}
+	if tr.data!= nil {
+		buf.WriteString(fmt.Sprint("[data]={\r\n"))
+		for idx,elm := range tr.data {
+			buf.WriteString(fmt.Sprintf("idx=[%d],elem=[%v] \r\n",idx,elm))
+		}
+		buf.WriteString(fmt.Sprint("}\r\n"))
+	}
+	return buf.String()
 }
 
 func MakeTaskResult(d []interface{},er error)*TaskResult{
@@ -198,6 +215,7 @@ func (g *GoRoutine)AddHandlersToChain(htypes []bool,hs []Handler)*GoRoutine{
 func (g *GoRoutine)Run()*GoRoutine{
 	g.lock.Lock()
 	defer g.lock.Unlock()
+	//log.Println("------------------>>>>>Goroutine Run start >>>>")
 	if g.state ==GoRoutine_RunningStatus || g.state ==GoRoutine_WaitRunStatus || g.state == GoRoutine_IdleStatus{
 		//已运行的不处理
 		return g
@@ -213,8 +231,8 @@ func (g *GoRoutine)Run()*GoRoutine{
 	go func(){
 		timeOut := time.NewTicker(g.maxAliveTime)
 		defer timeOut.Stop()
-ForEnd:
-		for{
+		exitFlag := false
+		for !exitFlag{
 			//select 1
 			select {
 				case anyOp:=<-g.opChan:
@@ -226,51 +244,50 @@ ForEnd:
 							g.state = GoRoutine_WaitRunStatus
 						case GoRoutine_OpCmd_Resume:
 							g.state = GoRoutine_IdleStatus
-						default:
-
 					}
 
-				case anyTasks:=<-g.Tasks.queue:
-					if g.state == GoRoutine_EndStatus{
-						//如果状态已经是终止状态 则不处理新的任务  只把剩余的任务执行完
-						continue
-					}else if g.state == GoRoutine_WaitRunStatus {
-						//如果是暂停状态 放到临时等待区
-						g.tempTaskZone = append(g.tempTaskZone,anyTasks...)
+
+			case anyTasks:=<-g.Tasks.queue:
+				if g.state == GoRoutine_EndStatus{
+					//如果状态已经是终止状态 则不处理新的任务  只把剩余的任务执行完
+					continue
+				}else if g.state == GoRoutine_WaitRunStatus {
+					//如果是暂停状态 放到临时等待区
+					g.tempTaskZone = append(g.tempTaskZone,anyTasks...)
+					sort.Sort(g.tempTaskZone)
+					continue
+				}
+				if len(anyTasks)>1 {
+					//如果一次获取到多个任务  先按优先级排序
+					sort.Sort(anyTasks)
+					if g.state == GoRoutine_RunningStatus{
+						//如果还是在执行状态 全放到临时区域
+						g.tempTaskZone = append(g.tempTaskZone, anyTasks...)
 						sort.Sort(g.tempTaskZone)
 						continue
+					}else if g.state == GoRoutine_IdleStatus {
+						//如果空闲就取一个
+						g.tempTaskZone = append(g.tempTaskZone, anyTasks[1:]...)
 					}
-					if len(anyTasks)>1 {
-						//如果一次获取到多个任务  先按优先级排序
-						sort.Sort(anyTasks)
-						if g.state == GoRoutine_RunningStatus{
-							//如果还是在执行状态 全放到临时区域
-							g.tempTaskZone = append(g.tempTaskZone, anyTasks...)
-							sort.Sort(g.tempTaskZone)
-							continue
-						}else if g.state == GoRoutine_IdleStatus {
-							//如果空闲就取一个
-							g.tempTaskZone = append(g.tempTaskZone, anyTasks[1:]...)
-						}
-					}
+				}
 
-					//取出优先级最高的先执行
-					task := anyTasks[0]
+				//取出优先级最高的先执行
+				task := anyTasks[0]
+				execTask(g,task,runTimeChan)
+
+			default:
+				if (g.state == GoRoutine_IdleStatus || g.state == GoRoutine_EndStatus ) && len(g.tempTaskZone) >0 {
+					//如果是空闲状态或者终止状态 且 临时区大小大于0
+					task := g.tempTaskZone[0]
+					g.tempTaskZone = g.tempTaskZone[1:]
 					execTask(g,task,runTimeChan)
+				}else if g.state == GoRoutine_EndStatus && len(g.tempTaskZone) ==0 {
+					//所有任务都已经完成  可以退出
+					close(runTimeChan)
+					close(g.noticeChan)
+					exitFlag = true
 
-				default:
-					if (g.state == GoRoutine_IdleStatus || g.state == GoRoutine_EndStatus ) && len(g.tempTaskZone) >0 {
-						//如果是空闲状态或者终止状态 且 临时区大小大于0
-						task := g.tempTaskZone[0]
-						g.tempTaskZone = g.tempTaskZone[1:]
-						execTask(g,task,runTimeChan)
-					}else if g.state == GoRoutine_EndStatus && len(g.tempTaskZone) ==0 {
-						//所有任务都已经完成  可以退出
-						close(runTimeChan)
-						close(g.noticeChan)
-						break ForEnd
-
-					}
+				}
 			}
 
 			//select 2
@@ -288,7 +305,7 @@ ForEnd:
 						//所有任务都已经完成  可以退出
 						close(runTimeChan)
 						close(g.noticeChan)
-						break ForEnd
+						exitFlag = true
 
 					}
 			}
@@ -332,7 +349,7 @@ func execTask(g *GoRoutine,task *WorkTask,runTimeChan chan time.Duration){
 	endTime := time.Now()
 	usedTime := endTime.Sub(startTime)
 	execHandlerChain(g,false)
-	go func() {
+	noticeFunc := func() {
 		task.FutureResult <- MakeTaskResult(rs, err)
 		close(task.FutureResult)
 		runTimeChan <- usedTime
@@ -341,12 +358,13 @@ func execTask(g *GoRoutine,task *WorkTask,runTimeChan chan time.Duration){
 		gn.RunErr = err
 		gn.CurrentRunTask = task.ToString()
 		g.noticeChan<-gn
-	}()
+	}
 	g.historyJobs = append(g.historyJobs,task)
 	//执行完成后更改状态 终止状态的情况 不能被更改
 	if g.state !=GoRoutine_EndStatus {
 		g.state = GoRoutine_IdleStatus
 	}
+	noticeFunc()
 }
 
 

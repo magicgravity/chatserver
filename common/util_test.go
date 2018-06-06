@@ -233,3 +233,13 @@ func TestQuickSort(t *testing.T) {
 	}
 
 }
+
+
+func TestGenRandomIntWithNegative(t *testing.T) {
+
+	ranv := GenRandomIntWithNegative(-255, 30)
+	fmt.Printf(">>>>>>>%d \r\n",ranv)
+
+	ranv = GenRandomIntWithNegative(-15, 100)
+	fmt.Printf(">>>>>>>%d \r\n",ranv)
+}
